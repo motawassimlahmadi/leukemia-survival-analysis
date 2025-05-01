@@ -1,0 +1,24 @@
+# Node.js
+node_modules/
+dist/
+.env
+
+# Python
+__pycache__/
+*.pyc
+env/
+venv/
+
+# .NET
+bin/
+obj/
+
+# Mac/Windows
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# VS Code
+.vscode/
