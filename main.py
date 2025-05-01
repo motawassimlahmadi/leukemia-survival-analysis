@@ -22,7 +22,7 @@ def main():
     parser.add_argument("--ml_method", type=str, default="Linear", help="name of the ML method to use ('XGBoost', 'LightGBM', 'Logistic Regression')")
     parser.add_argument("--l2_penalty", type=float, default=1., help="strength of the L2 penalty used when fitting the model")
     parser.add_argument("--cv_nsplits", type=int, default=5, help="cross-validation: number of splits")
-    parser.add_argument("--save_dir", type=str, default="", help="where to save the model, the logs and the configuration")
+    parser.add_argument("--save_dir", type=str, default="models", help="where to save the model, the logs and the configuration")
 
     args = parser.parse_args()
 
@@ -40,8 +40,7 @@ def main():
     # Loading
     df = load_dataset(args.dataset_path)
     
-    
-    
+    print(df)
     
     
 
