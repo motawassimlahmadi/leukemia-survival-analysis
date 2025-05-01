@@ -38,7 +38,7 @@ def main():
         json.dump(vars(args), f)
 
     # Loading
-    df = load_dataset(args.dataset_path)
+    df= load_dataset(args.dataset_path)
     
     print(df)
     
