@@ -3,12 +3,8 @@ import os
 import json
 from time import gmtime, strftime
 
-from src.data.load_data import load_dataset, load_additional_data
-from src.data.preprocess import preprocess_data
-from src.features.build_features import build_features
-from src.models.train_model import split_data, train_model, save_model_and_results
-from src.models.clustering import  apply_opt_kmeans, apply_kmeans , silouhette_score , apply_label , centroids , cluster_mean , describe_clusters
-from src.visualization.visualize import plot_pca
+from src.data.molecular_preprocess import process_molecular_data
+from src.data.load_data import load_dataset
 
 def main():
     
@@ -39,6 +35,8 @@ def main():
 
     # Loading
     df= load_dataset(args.dataset_path)
+    
+    df = process_molecular_data(df)
     
     print(df)
     
