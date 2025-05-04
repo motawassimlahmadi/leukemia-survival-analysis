@@ -15,6 +15,15 @@ from sksurv.util import Surv
 from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import IterativeImputer
 from sklearn.ensemble import RandomForestRegressor
+import category_encoders as ce
+import mygene
+from sklearn.preprocessing import MultiLabelBinarizer
+import re 
+
+
+
+
+
 
 
 def imputation_null_values(df , cl , estimator) :
@@ -35,6 +44,8 @@ def imputation_null_values(df , cl , estimator) :
     df = df.with_columns([imputed_pl[col].alias(col) for col in quant_vars])
     
     return df
+
+
 
 
 
@@ -83,6 +94,277 @@ def extract_kmers(sequence, k):
 
 def join_str(str):
     return ' '.join(str)
+
+
+
+def binary_encoder(df , cl):
+    df_pd = df.to_pandas()
+
+    encoder = ce.BinaryEncoder(cols=[cl])
+    df = encoder.fit_transform(df_pd)
+
+
+
+    df = pl.from_pandas(df_pd)
+
+    return df
+
+
+def gene_new_name(df , cl):
+    # MLL => KMT2A
+    # WHSC1 => NSD2
+    # H3F3A => H3-3A 
+    # FAM175A => ABRAXAS1
+    # PAPD5 => TENT4B
+
+    # NATIONAL LIBRARY OF MEDICINE
+
+    mapping = {'MLL' : 'KMT2A' , 'WHSC1' : 'NSD2' , 'H3F3A' : 'H3-3A' , 'FAM175A' : 'ABRAXAS1' , 'PAPD5' : 'TENT4B'}
+
+    df = df.with_columns(
+        pl.col(cl).map_elements(lambda g: mapping.get(g, g)).alias(cl)
+    )
+    
+    return df
+
+
+def cytogenetics(df , cl):
+    genes = list(df[cl].unique())
+
+    mg = mygene.MyGeneInfo()
+
+    results = mg.querymany(genes, scopes="symbol", fields='go', species="human")
+
+    return results
+
+
+def genes_to_go(results_cyto):
+    gene_to_go = {}
+    for res in results_cyto:
+        gene = res.get('query')
+        go_bp = res.get('go', {}).get('BP', [])
+        if isinstance(go_bp, dict):  # Cas d'un seul terme
+            go_bp = [go_bp]
+        go_terms = [go['id'] for go in go_bp if 'id' in go]
+        if gene and go_terms:
+            gene_to_go[gene] = go_terms
+            
+    return gene_to_go
+
+
+def multi_label_gene_go(gene_to_go):
+    # 4. Créer une matrice binaire gène × GO term
+    mlb = MultiLabelBinarizer()
+    go_matrix = mlb.fit_transform(gene_to_go.values())
+    go_df = pd.DataFrame(go_matrix, index=gene_to_go.keys(), columns=mlb.classes_)
+
+    # 5. Filtrer les GO terms peu fréquents (seuil = 5 gènes)
+    min_gene_count = 5
+    filtered_go_df = go_df.loc[:, (go_df.sum(axis=0) >= min_gene_count)]
+
+    
+    return filtered_go_df
+
+
+def merge_df(df1 , filtered_go_df , cl , how):
+    df_pd = df1.to_pandas()
+
+    df_merged = df_pd.merge(filtered_go_df, left_on=cl, right_index=True, how=how)
+    
+    df_merged = pl.from_pandas(df_merged)
+    
+    return df_merged
+
+
+
+def protein_name(protein_changes, ch):
+    lst_prot = []
+    pattern = rf"p\.{ch}\d+.*"
+
+    for prot in protein_changes:
+        if isinstance(prot, str): 
+            prot_name = re.findall(pattern, prot)
+            if prot_name:
+                lst_prot+=prot_name
+                
+    return lst_prot
+
+
+def get_protein_dico(uppercase_alphabet , lst , aa_fullname):
+    dico_protein_changes = {}
+        
+    for ch in uppercase_alphabet:
+        if(len(lst) >=1):
+            ch_name = aa_fullname.get(ch)
+            dico_protein_changes[ch_name] = lst
+            
+    return dico_protein_changes
+
+
+def protein_type(df , protein_change , dico_protein_changes):
+    acide_aminee = {}
+
+    for elem in protein_change:
+        for aa_name , mutations in dico_protein_changes.items():
+            if elem in mutations:
+                acide_aminee[elem] = aa_name
+                
+                          
+    # KMT2A => MLL PTD => Lysine 
+    # FLT3-ID => FLT3 => tyrosine
+
+    acide_aminee["MLL_PTD"] = "Lysine"
+    acide_aminee["FLT3_ITD"] = "Tyrosine"
+    acide_aminee["p.?"] = "Unknown"
+    
+    df = df.with_columns(
+        pl.col("PROTEIN_CHANGE").map_elements(lambda x: acide_aminee.get(x, None)).alias("AA_TYPE")
+    )
+                
+    return acide_aminee , df
+
+
+def remove_row_element(df , col , lst):
+
+    for elem in lst:
+        df = df.remove(pl.col(col) == elem)
+        
+    return df
+
+
+def drop_null_subset(df, subset):
+    df = df.drop_nulls(subset=subset)
+    
+    return df
+
+
+def is_protein_unknown(df):
+    df = df.with_columns(
+        pl.when(pl.col("PROTEIN_CHANGE") == "p.?")
+        .then(1)
+        .otherwise(0)
+        .alias("IS_PT_UKNOWN")
+    )
+    
+    return df
+
+def is_frameshift(df):
+    df = df.with_columns(
+        pl.when(pl.col("PROTEIN_CHANGE").str.contains('fs'))
+        .then(1)
+        .otherwise(0)
+        .alias("is_frameshift")
+    )
+    
+    return df
+
+def is_non_sens(df):
+    #NON_SENS_MUTATION
+    df = df.with_columns(
+        pl.when(pl.col("PROTEIN_CHANGE").str.contains("\*"))
+        .then(1)
+        .otherwise(0)
+        .alias("is_non_sens_mutation")
+    )
+    
+    return df
+
+def ismissense(elem):
+    if elem is not None and isinstance(elem, str):
+        # Vérifie que le dernier caractère est une lettre majuscule (acide aminé)
+        if elem.startswith("p.") and elem[-1].isalpha() and "*" not in elem and "fs" not in elem:
+            return 1
+    return 0
+
+def is_miss_sense(df , function):
+    df = df.with_columns(
+        pl.col("PROTEIN_CHANGE").map_elements(function, return_dtype=pl.Int64).alias("IS_MISSENSE")
+    )
+    
+    return df
+
+
+def process_molecular_data(mol_df):
+    
+    # Validate input
+    if not isinstance(mol_df, pl.DataFrame):
+        raise TypeError("Input must be a polars DataFrame")
+    
+    
+
+    # 1. Imputation of missing values for VAF and DEPTH
+    mol_df = imputation_null_values(mol_df, ["VAF", "DEPTH"], RandomForestRegressor())
+
+    # 2. Convert CHR to integer
+    mol_df = chr_to_int(mol_df, "CHR")
+
+    # 3. Apply gene name mapping
+    mol_df = gene_new_name(mol_df, "GENE")
+
+    # 4. Apply cytogenetics to GENE column
+    results_cyto = cytogenetics(mol_df, "GENE")
+
+    # 5. Process gene ontology data
+    gene_to_go_dict = genes_to_go(results_cyto)
+    filtered_go_df = multi_label_gene_go(gene_to_go_dict)
+
+    # 6. Merge the dataframes
+    mol_df = merge_df(mol_df, filtered_go_df, "GENE", "left")
+
+    # 7. Imputation of missing values for CHR, START, END
+    mol_df = imputation_null_values(mol_df, ["CHR", "START", "END"], RandomForestRegressor())
+
+    # 8. Process protein change information
+    # Define amino acid mapping for protein analysis
+    uppercase_alphabet = [chr(i) for i in range(ord('A'), ord('Z') + 1)]
+    aa_fullname = {
+        'A': 'Alanine', 'C': 'Cysteine', 'D': 'Aspartic_Acid', 'E': 'Glutamic_Acid',
+        'F': 'Phenylalanine', 'G': 'Glycine', 'H': 'Histidine', 'I': 'Isoleucine',
+        'K': 'Lysine', 'L': 'Leucine', 'M': 'Methionine', 'N': 'Asparagine',
+        'P': 'Proline', 'Q': 'Glutamine', 'R': 'Arginine', 'S': 'Serine',
+        'T': 'Threonine', 'V': 'Valine', 'W': 'Tryptophan', 'Y': 'Tyrosine'
+    }
+
+    # Process protein changes for each amino acid
+    protein_changes = mol_df["PROTEIN_CHANGE"].to_list()
+    dico_protein_changes = {}
+
+    for ch in uppercase_alphabet:
+        lst_prot = protein_name(protein_changes, ch)
+        if lst_prot:
+            ch_name = aa_fullname.get(ch)
+            dico_protein_changes[ch_name] = lst_prot
+
+    # Apply protein type classification
+    acide_aminee, mol_df = protein_type(mol_df, protein_changes, dico_protein_changes)
+
+    # 9. Remove specific protein changes
+    protein_remove = ["p.*636C", "p.*342*", "p.*342S", "p.*636W"]
+    mol_df = remove_row_element(mol_df, "PROTEIN_CHANGE", protein_remove)
+
+    # 10. Mark unknown proteins
+    mol_df = is_protein_unknown(mol_df)
+
+    # 11. Apply binary encoding to AA_TYPE
+    mol_df = binary_encoder(mol_df, "AA_TYPE")
+
+    # 12. Identify frameshift mutations
+    mol_df = is_frameshift(mol_df)
+
+    # 13. Identify nonsense mutations
+    mol_df = is_non_sens(mol_df)
+
+    # 14. Identify missense mutations - optimized approach
+    # Using the provided ismissense function directly with is_miss_sense
+    mol_df = is_miss_sense(mol_df, ismissense)
+
+    return mol_df
+    
+
+
+
+
+    
 
 
 
