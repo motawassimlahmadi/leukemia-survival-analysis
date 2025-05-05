@@ -18,33 +18,8 @@ from sklearn.ensemble import RandomForestRegressor
 import category_encoders as ce
 import mygene
 from sklearn.preprocessing import MultiLabelBinarizer
-import re 
-
-
-
-
-
-
-
-def imputation_null_values(df , cl , estimator) :
-    quant_vars = cl
-    sub_df = df.select(quant_vars)
-
-    # Convert to pandas
-    sub_pd = sub_df.to_pandas()
-
-    # Apply Model-Based Imputation (Random Forest)
-    imputer = IterativeImputer(estimator=estimator, random_state=42)
-    imputed_data = imputer.fit_transform(sub_pd)
-
-    # 4. To Polars
-    imputed_pl = pl.DataFrame(imputed_data, schema=sub_df.columns)
-
-    # 5. Replace nulls
-    df = df.with_columns([imputed_pl[col].alias(col) for col in quant_vars])
-    
-    return df
-
+import re
+from src.data.basic_preprocess import *
 
 
 
@@ -95,19 +70,6 @@ def extract_kmers(sequence, k):
 def join_str(str):
     return ' '.join(str)
 
-
-
-def binary_encoder(df , cl):
-    df_pd = df.to_pandas()
-
-    encoder = ce.BinaryEncoder(cols=[cl])
-    df = encoder.fit_transform(df_pd)
-
-
-
-    df = pl.from_pandas(df_pd)
-
-    return df
 
 
 def gene_new_name(df , cl):
@@ -276,12 +238,37 @@ def ismissense(elem):
             return 1
     return 0
 
-def is_miss_sense(df , function):
-    df = df.with_columns(
-        pl.col("PROTEIN_CHANGE").map_elements(function, return_dtype=pl.Int64).alias("IS_MISSENSE")
+
+
+
+def add_mutation_density_features(mol_df):
+    """Add mutation density features to the molecular dataframe"""
+
+    # Count mutations per gene
+    gene_counts = mol_df.group_by("GENE").agg(
+        pl.len().alias("mutations_per_gene")
     )
+
+    # Count mutations per gene and effect type
+    gene_effect_counts = mol_df.group_by(["GENE", "EFFECT"]).agg(
+        pl.len().alias("mutations_per_gene_effect")
+    )
+
+    # Count mutations per chromosome region (binned)
+    region_counts = mol_df.group_by(["CHR", "START"]).agg(
+        pl.len().alias("mutations_per_region")
+    )
+
+    # Join these counts back to the original dataframe
+    mol_df = mol_df.join(gene_counts, on="GENE", how="left")
+
+    # For gene-effect counts, we need to join on both columns
+    mol_df = mol_df.join(gene_effect_counts, on=["GENE", "EFFECT"], how="left")
     
-    return df
+    # Join region counts
+    mol_df = mol_df.join(region_counts, on=["CHR", "START"], how="left")
+
+    return mol_df
 
 
 def process_molecular_data(mol_df):
@@ -290,17 +277,23 @@ def process_molecular_data(mol_df):
     if not isinstance(mol_df, pl.DataFrame):
         raise TypeError("Input must be a polars DataFrame")
     
-    
+    # Outliers
+    mol_df = iqr_method(mol_df , ["VAF" , "DEPTH" , "START" , "END"])
 
-    # 1. Imputation of missing values for VAF and DEPTH
-    mol_df = imputation_null_values(mol_df, ["VAF", "DEPTH"], RandomForestRegressor())
-
-    # 2. Convert CHR to integer
+    # 1. Convert CHR to integer
     mol_df = chr_to_int(mol_df, "CHR")
+    
+    # 2. Imputation of missing values for VAF and DEPTH
+    mol_df = imputation_null_values(mol_df, ["CHR" , "START" , "END" , "VAF", "DEPTH"], RandomForestRegressor())
 
+    # Add mutation density features to the molecular dataframe
+    mol_df = add_mutation_density_features(mol_df)
+    
+    
     # 3. Apply gene name mapping
     mol_df = gene_new_name(mol_df, "GENE")
-
+    
+    
     # 4. Apply cytogenetics to GENE column
     results_cyto = cytogenetics(mol_df, "GENE")
 
@@ -310,9 +303,6 @@ def process_molecular_data(mol_df):
 
     # 6. Merge the dataframes
     mol_df = merge_df(mol_df, filtered_go_df, "GENE", "left")
-
-    # 7. Imputation of missing values for CHR, START, END
-    mol_df = imputation_null_values(mol_df, ["CHR", "START", "END"], RandomForestRegressor())
 
     # 8. Process protein change information
     # Define amino acid mapping for protein analysis
@@ -346,7 +336,7 @@ def process_molecular_data(mol_df):
     mol_df = is_protein_unknown(mol_df)
 
     # 11. Apply binary encoding to AA_TYPE
-    mol_df = binary_encoder(mol_df, "AA_TYPE")
+    mol_df = binary_encoder(mol_df, ["AA_TYPE" , "EFFECT"])
 
     # 12. Identify frameshift mutations
     mol_df = is_frameshift(mol_df)
@@ -356,7 +346,14 @@ def process_molecular_data(mol_df):
 
     # 14. Identify missense mutations - optimized approach
     # Using the provided ismissense function directly with is_miss_sense
-    mol_df = is_miss_sense(mol_df, ismissense)
+    mol_df = map_lambda(mol_df,"PROTEIN_CHANGE","IS_MISSENSE" , ismissense , pl.Int32)
+    
+    # Min_Max Normalization
+    
+    col_to_normalize = ["START", "END" , "DEPTH" , "mutations_per_gene" , "mutations_per_gene_effect" , "mutations_per_region"]
+    
+    mol_df = min_max_normalization(mol_df , col_to_normalize)
+    
 
     return mol_df
     
