@@ -239,6 +239,32 @@ def ismissense(elem):
     return 0
 
 
+def is_SNV(df , col , letter):
+    df = df.with_columns(
+        pl.when(pl.col(col) == letter)
+        .then(1)
+        .otherwise(0)
+        .alias(f"{col}_is_SNV_{letter}")
+    )
+    
+    return df
+
+
+
+
+def complex_nucleotide(df , col ):
+    df = df.with_columns(
+        pl.when(pl.col(col).str.len_chars() > 1)
+        .then(1)
+        .otherwise(0)
+        .alias(f"complex_nucleotide_{col}")
+    )
+    
+    return df
+
+
+
+
 
 
 def add_mutation_density_features(mol_df):
@@ -352,7 +378,25 @@ def process_molecular_data(mol_df):
     
     col_to_normalize = ["START", "END" , "DEPTH" , "mutations_per_gene" , "mutations_per_gene_effect" , "mutations_per_region"]
     
+    
+    #REF
+    snv_lst = ['A','C','G','T']
+    for snv in snv_lst:
+        mol_df =  is_SNV(mol_df , "REF" , snv)
+    
+    #ALT
+    for snv in snv_lst:
+        mol_df =  is_SNV(mol_df , "ALT" , snv)
+        
+    # Complex Nucleotide
+    
+    mol_df = complex_nucleotide(mol_df , "REF")
+    mol_df = complex_nucleotide(mol_df , "ALT")
+        
+        
     mol_df = min_max_normalization(mol_df , col_to_normalize)
+    
+    
     
 
     return mol_df
