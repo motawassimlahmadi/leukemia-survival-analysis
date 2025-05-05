@@ -20,14 +20,13 @@ def map_lambda(df , col , new_name , function , return_type):
 
 
 
-def binary_encoder(df , cl_lst):
+def binary_encoder(df, cl_lst):
     df_pd = df.to_pandas()
-    for cl in cl_lst:
-        encoder = ce.BinaryEncoder(cols=[cl])
-        df = encoder.fit_transform(df_pd)
-    df = pl.from_pandas(df_pd)
-
-    return df
+    
+    encoder = ce.BinaryEncoder(cols=cl_lst)
+    df_encoded = encoder.fit_transform(df_pd)
+    
+    return pl.from_pandas(df_encoded)
 
 
 
