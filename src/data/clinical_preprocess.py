@@ -59,6 +59,10 @@ def transloc_nbr(cytogenetic):
             return flat
     return [-1]
 
+
+def is_complex(cyto):
+    return 1 if len(re.findall(r"\+|\-|del|t|inv|add|i\(", cyto)) >= 3 else 0
+
 def process_clinical_data(cl_df):
     
     # Validate input
@@ -82,59 +86,63 @@ def process_clinical_data(cl_df):
     cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_a_Female" , is_female_karyotype , pl.Int32)
     
     # Deletion anomaly
-    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_deletion_anomaly" , cyto_regex(reg_expr=r'del'), pl.Int32)
+    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_deletion_anomaly" , lambda x: cyto_regex(x, reg_expr=r'del'), pl.Int32)
     
     # Deleted chromosome
-    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "deleted_chromosome" , anomaly_number(keyword=r'del' , regex_expr=r"del\((\d+.*)\)"), pl.Int64)
+    
+    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "deleted_chromosome" , lambda x: anomaly_number(x,keyword=r'del' , regex_expr=r"del\((\d+)\)"), pl.Int64)
     
     # Inversion anomaly
-    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_inversion_anomaly" , cyto_regex(reg_expr=r'inv' ) , pl.Int32)
+    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_inversion_anomaly" , lambda x: cyto_regex(x , reg_expr=r'inv' ) , pl.Int32)
     
     # Inverted chromosme
-    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "deleted_chromosome" , anomaly_number(keyword=r'inv' , regex_expr=r"inv\((\d+.*)\)"), pl.Int64)
+    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "inverted_chromosome" , lambda x: anomaly_number(x,keyword=r'inv' , regex_expr=r"inv\((\d+)\)"), pl.Int64)
     
     # Added chromosome
-    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_added_anomaly" , cyto_regex(reg_expr=r'add' ) , pl.Int32)
+    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_added_anomaly" , lambda x: cyto_regex(x , reg_expr=r'add' ) , pl.Int32)
     
     # Added chromosme
-    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "added_chromosome" , anomaly_number(keyword=r'add' , regex_expr=r"add\((\d+.*)\)"), pl.Int64)
+    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "added_chromosome" , lambda x: anomaly_number(x,keyword=r'add' , regex_expr=r"add\((\d+)\)"), pl.Int64)
     
     # Translocation anomaly
-    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_translocated_anomaly" , cyto_regex(reg_expr=r't' ) , pl.Int32)
+    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_translocated_anomaly" , lambda x: cyto_regex(x ,reg_expr=r't' ) , pl.Int32)
     
     # Translocated anomaly
     cl_df = map_lambda(cl_df , "CYTOGENETICS" , "translocated_chromosome" , transloc_nbr, pl.List(pl.Int64))
     
     # Downs Syndrome
-    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_down_syndrome" , cyto_regex(keyword=r'\+21' ) , pl.Int32)
+    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_down_syndrome" , lambda x: cyto_regex(x , reg_expr=r'\+21' ) , pl.Int32)
     
     # Monosomy 7 
-    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_monosomy" , cyto_regex(keyword=r'\-7' ) , pl.Int32)
+    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_monosomy" , lambda x: cyto_regex(x ,reg_expr=r'\-7' ) , pl.Int32)
     
     
     # Partial deletion of 7th chromosome
-    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_7_deleted" , cyto_regex(keyword=r'del\(7\)' ) , pl.Int32)
+    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_7_deleted" , lambda x: cyto_regex(x ,reg_expr=r'del\(7\)' ) , pl.Int32)
     
     # Trisomy 8
-    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_trisomy_8" , cyto_regex(keyword=r'\+8' ) , pl.Int32)
+    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_trisomy_8" , lambda x: cyto_regex(x , reg_expr=r'\+8' ) , pl.Int32)
     
     # Isochromosome
-    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "iso_chromosome" , cyto_regex(keyword=r"i\(\d+\)|iso\(\d.+\)") , pl.Int64)
+    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "iso_chromosome" , lambda x: cyto_regex(x ,reg_expr=r"i\(\d+\)|iso\(\d.+\)") , pl.Int64)
     
     # Derived chromosome
-    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_derived_chromosome" , cyto_regex(keyword=r"der\(\d+\)") , pl.Int64)
+    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_derived_chromosome" , lambda x: cyto_regex(x,reg_expr=r"der\(\d+\)") , pl.Int64)
     
     # Lost sex chromosome
-    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_lost_sex_chromosome" , cyto_regex(keyword=r"\-[xy]") , pl.Int64)
+    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_lost_sex_chromosome" , lambda x: cyto_regex(x,reg_expr=r"\-[xy]") , pl.Int64)
     
     # Added chromosomes
-    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_added_chromsome" , cyto_regex(keyword=r",\+\d+") , pl.Int64)
+    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_added_chromsome" , lambda x: cyto_regex(x,reg_expr=r",\+\d+") , pl.Int64)
     
     # Deleted chromosomes
-    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_deleted_chromsome" , cyto_regex(keyword=r",\-\d+") , pl.Int64)
+    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_deleted_chromsome" , lambda x: cyto_regex(x,reg_expr=r",\-\d+") , pl.Int64)
     
     # Inserted chromosomes
-    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_inserted_chromsome" , cyto_regex(keyword=r"ins") , pl.Int64)
+    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_inserted_chromsome" , lambda x: cyto_regex(x,reg_expr=r"ins") , pl.Int64)
+    
+    # Complex Karyotype
+    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_complex_karyo" , is_complex , pl.Int64)
     
     
     # Min-max Normalization

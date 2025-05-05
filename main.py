@@ -5,6 +5,7 @@ from time import gmtime, strftime
 
 from src.data.molecular_preprocess import process_molecular_data
 from src.data.load_data import load_dataset
+from src.data.clinical_preprocess import process_clinical_data
 
 def main():
     
@@ -38,7 +39,13 @@ def main():
     
     df = process_molecular_data(df)
     
+    cl_df = load_dataset("data/raw/X_train/clinical_train.csv")
+    
+    cl_df = process_clinical_data(cl_df)
+    
     print(df)
+    print(cl_df)
+    
     
     
 
