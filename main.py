@@ -6,6 +6,11 @@ from time import gmtime, strftime
 from src.data.molecular_preprocess import process_molecular_data
 from src.data.load_data import load_dataset
 from src.data.clinical_preprocess import process_clinical_data
+from src.data.y_train_preprocess import y_train_preprocess
+import polars as pl
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from sklearn.metrics import accuracy_score, root_mean_squared_error
+from sklearn.model_selection import train_test_split
 
 def main():
     
@@ -34,17 +39,53 @@ def main():
     with open(path_config, "w") as f:
         json.dump(vars(args), f)
 
-    # Loading
+    # Molecular data set
     df= load_dataset(args.dataset_path)
-    
     df = process_molecular_data(df)
     
+    # Clinical data set
     cl_df = load_dataset("data/raw/X_train/clinical_train.csv")
-    
     cl_df = process_clinical_data(cl_df)
     
-    print(df)
-    print(cl_df)
+    # Joining the two datasets
+    df_mol_cl = df.join(cl_df , on="ID" , how="left")
+    
+    # Y_train data set
+    y_train = load_dataset("data/raw/target_train.csv")
+    y_train = y_train_preprocess(y_train)
+    
+    
+    
+    final_df = df_mol_cl.join(y_train , on="ID" , how="left")
+    
+    final_df = final_df.drop("ID")
+    final_df = final_df.drop([col for col, dtype in zip(final_df.columns, final_df.dtypes) if dtype == pl.Utf8])
+    
+    print(final_df)
+    
+    df_pd = final_df.to_pandas()
+
+    # Variables d'entrée
+    X = df_pd.drop(columns=["OS_STATUS", "OS_YEARS"])
+    y_class = df_pd["OS_STATUS"]
+    y_reg = df_pd["OS_YEARS"]
+
+    # Split
+    X_train, X_test, y_class_train, y_class_test, y_reg_train, y_reg_test = train_test_split(
+        X, y_class, y_reg, test_size=0.2, random_state=42
+    )
+    
+    clf = RandomForestClassifier(random_state=42)
+    clf.fit(X_train, y_class_train)
+    y_class_pred = clf.predict(X_test)
+    acc = accuracy_score(y_class_test, y_class_pred)
+    print(f"Accuracy OS_STATUS: {acc:.4f}")
+    
+    reg = RandomForestRegressor(random_state=42)
+    reg.fit(X_train, y_reg_train)
+    y_reg_pred = reg.predict(X_test)
+    rmse = root_mean_squared_error(y_reg_test, y_reg_pred)
+    print(f"RMSE OS_YEARS: {rmse:.4f}")
     
     
     

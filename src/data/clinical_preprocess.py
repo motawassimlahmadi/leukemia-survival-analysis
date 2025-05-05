@@ -90,25 +90,25 @@ def process_clinical_data(cl_df):
     
     # Deleted chromosome
     
-    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "deleted_chromosome" , lambda x: anomaly_number(x,keyword=r'del' , regex_expr=r"del\((\d+)\)"), pl.Int64)
+    # cl_df = map_lambda(cl_df , "CYTOGENETICS" , "deleted_chromosome" , lambda x: anomaly_number(x,keyword=r'del' , regex_expr=r"del\((\d+)\)"), pl.Int64)
     
     # Inversion anomaly
     cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_inversion_anomaly" , lambda x: cyto_regex(x , reg_expr=r'inv' ) , pl.Int32)
     
     # Inverted chromosme
-    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "inverted_chromosome" , lambda x: anomaly_number(x,keyword=r'inv' , regex_expr=r"inv\((\d+)\)"), pl.Int64)
+    # cl_df = map_lambda(cl_df , "CYTOGENETICS" , "inverted_chromosome" , lambda x: anomaly_number(x,keyword=r'inv' , regex_expr=r"inv\((\d+)\)"), pl.Int64)
     
     # Added chromosome
     cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_added_anomaly" , lambda x: cyto_regex(x , reg_expr=r'add' ) , pl.Int32)
     
     # Added chromosme
-    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "added_chromosome" , lambda x: anomaly_number(x,keyword=r'add' , regex_expr=r"add\((\d+)\)"), pl.Int64)
+    # cl_df = map_lambda(cl_df , "CYTOGENETICS" , "added_chromosome" , lambda x: anomaly_number(x,keyword=r'add' , regex_expr=r"add\((\d+)\)"), pl.Int64)
     
-    # Translocation anomaly
-    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_translocated_anomaly" , lambda x: cyto_regex(x ,reg_expr=r't' ) , pl.Int32)
+    # # Translocation anomaly
+    # cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_translocated_anomaly" , lambda x: cyto_regex(x ,reg_expr=r't' ) , pl.Int32)
     
-    # Translocated anomaly
-    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "translocated_chromosome" , transloc_nbr, pl.List(pl.Int64))
+    # # Translocated anomaly
+    # cl_df = map_lambda(cl_df , "CYTOGENETICS" , "translocated_chromosome" , transloc_nbr, pl.List(pl.Int64))
     
     # Downs Syndrome
     cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_down_syndrome" , lambda x: cyto_regex(x , reg_expr=r'\+21' ) , pl.Int32)
