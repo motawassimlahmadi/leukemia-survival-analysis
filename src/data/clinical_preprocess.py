@@ -4,97 +4,8 @@ import random
 from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import IterativeImputer
 from sklearn.ensemble import RandomForestRegressor
-import category_encoders as ce
+from src.data.basic_preprocess import *
 import re
-
-
-
-
-
-def imputation_null_values(df , cl , estimator) :
-    quant_vars = cl
-    sub_df = df.select(quant_vars)
-
-    # Convert to pandas
-    sub_pd = sub_df.to_pandas()
-
-    # Apply Model-Based Imputation (Random Forest)
-    imputer = IterativeImputer(estimator=estimator, random_state=42)
-    imputed_data = imputer.fit_transform(sub_pd)
-
-    # 4. To Polars
-    imputed_pl = pl.DataFrame(imputed_data, schema=sub_df.columns)
-
-    # 5. Replace nulls
-    df = df.with_columns([imputed_pl[col].alias(col) for col in quant_vars])
-    
-    return df
-
-
-
-def forward_imputation(df):
-    df = df.fill_null(strategy="forward")
-
-    return df
-
-
-def iqr_method(df , cl_lst):
-
-    for (index , cl )  in enumerate(cl_lst):
-        q1 = df.select(pl.col(cl).quantile(0.25)).item()
-        q3 = df.select(pl.col(cl).quantile(0.75)).item()
-        
-        iqr = q3 - q1
-        
-        
-        lower_bound = q1 - 1.5 * iqr
-        upper_bound = q3 + 1.5 * iqr
-
-        
-        # Winsorisation : capped values
-        df = df.with_columns(
-            pl.when(pl.col(cl) < lower_bound).then(lower_bound)
-            .when(pl.col(cl) > upper_bound).then(upper_bound)
-            .otherwise(pl.col(cl))
-            .alias(cl)
-        )
-        
-        
-        
-        return df
-    
-
-def z_score(df, cl_list):
-    
-    for cl in cl_list:
-        mean = df.select(pl.col(cl).mean()).item()
-        std = df.select(pl.col(cl).std()).item()
-
-        # Définir les bornes avec Z = ±3
-        lower_bound = mean - 3 * std
-        upper_bound = mean + 3 * std
-
-        # Appliquer la winsorisation
-        df = df.with_columns(
-            pl.when(pl.col(cl) < lower_bound).then(lower_bound)
-            .when(pl.col(cl) > upper_bound).then(upper_bound)
-            .otherwise(pl.col(cl))
-            .alias(cl)
-        )
-
-    return df
-
-
-
-def binary_encoder(df, cl):
-    df_pd = df.to_pandas()
-
-    encoder = ce.BinaryEncoder(cols=[cl])
-    df_encoded = encoder.fit_transform(df_pd)
-
-    df = pl.from_pandas(df_encoded)
-    
-    return df
 
 
 
@@ -121,14 +32,17 @@ def is_a_Female(df , col):
     return df
 
 
+def cyto_regex(cyto , reg_expr):
+    if cyto is not None:
+        if re.search(reg_expr,cyto,re.IGNORECASE):
+            return 1
+    return 0
 
-def contains_cyto(cytogenetic, keyword):
-    return 1 if keyword in cytogenetic.lower() else 0
 
 
 # Used for inv , del , add 
 def anomaly_number(cytogenetic , keyword , regex_expr):
-    if contains_cyto(cytogenetic ,keyword):
+    if cyto_regex(cytogenetic ,keyword):
         del_nbr = re.findall(regex_expr, cytogenetic)
         if del_nbr: 
             return int(del_nbr[0])
@@ -138,35 +52,106 @@ def anomaly_number(cytogenetic , keyword , regex_expr):
 # DETECTION DE TRANSLOCATION
 
 def transloc_nbr(cytogenetic):
-    if contains_cyto(cytogenetic, 't'):
+    if cyto_regex(cytogenetic, 't'):
         trans_nbr = re.findall(r"t\((\d+);(\d+)\)", cytogenetic)
         if trans_nbr:
             flat = [int(x) for tup in trans_nbr for x in tup]
             return flat
     return [-1]
 
+def process_clinical_data(cl_df):
+    
+    # Validate input
+    if not isinstance(cl_df, pl.DataFrame):
+        raise TypeError("Input must be a polars DataFrame")
+    
+    # Outliers
+    cl_df = iqr_method(cl_df, ["BM_BLAST", "WBC", "ANC", "MONOCYTES", "HB", "PLT"])
+    
+    
+    # 2. Imputation of missing values for VAF and DEPTH
+    cl_df = imputation_null_values(cl_df, ["BM_BLAST", "WBC", "ANC", "MONOCYTES", "HB", "PLT"], RandomForestRegressor())
+    
+    # CENTER Encoding
+    cl_df = binary_encoder(cl_df, ["CENTER"])
+    
+    # Male Karyotype
+    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_a_Man" , is_male_karyotype , pl.Int32)
+    
+    # Female karyotype
+    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_a_Female" , is_female_karyotype , pl.Int32)
+    
+    # Deletion anomaly
+    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_deletion_anomaly" , cyto_regex(reg_expr=r'del'), pl.Int32)
+    
+    # Deleted chromosome
+    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "deleted_chromosome" , anomaly_number(keyword=r'del' , regex_expr=r"del\((\d+.*)\)"), pl.Int64)
+    
+    # Inversion anomaly
+    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_inversion_anomaly" , cyto_regex(reg_expr=r'inv' ) , pl.Int32)
+    
+    # Inverted chromosme
+    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "deleted_chromosome" , anomaly_number(keyword=r'inv' , regex_expr=r"inv\((\d+.*)\)"), pl.Int64)
+    
+    # Added chromosome
+    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_added_anomaly" , cyto_regex(reg_expr=r'add' ) , pl.Int32)
+    
+    # Added chromosme
+    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "added_chromosome" , anomaly_number(keyword=r'add' , regex_expr=r"add\((\d+.*)\)"), pl.Int64)
+    
+    # Translocation anomaly
+    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_translocated_anomaly" , cyto_regex(reg_expr=r't' ) , pl.Int32)
+    
+    # Translocated anomaly
+    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "translocated_chromosome" , transloc_nbr, pl.List(pl.Int64))
+    
+    # Downs Syndrome
+    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_down_syndrome" , cyto_regex(keyword=r'\+21' ) , pl.Int32)
+    
+    # Monosomy 7 
+    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_monosomy" , cyto_regex(keyword=r'\-7' ) , pl.Int32)
+    
+    
+    # Partial deletion of 7th chromosome
+    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_7_deleted" , cyto_regex(keyword=r'del\(7\)' ) , pl.Int32)
+    
+    # Trisomy 8
+    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_trisomy_8" , cyto_regex(keyword=r'\+8' ) , pl.Int32)
+    
+    # Isochromosome
+    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "iso_chromosome" , cyto_regex(keyword=r"i\(\d+\)|iso\(\d.+\)") , pl.Int64)
+    
+    # Derived chromosome
+    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_derived_chromosome" , cyto_regex(keyword=r"der\(\d+\)") , pl.Int64)
+    
+    # Lost sex chromosome
+    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_lost_sex_chromosome" , cyto_regex(keyword=r"\-[xy]") , pl.Int64)
+    
+    # Added chromosomes
+    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_added_chromsome" , cyto_regex(keyword=r",\+\d+") , pl.Int64)
+    
+    # Deleted chromosomes
+    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_deleted_chromsome" , cyto_regex(keyword=r",\-\d+") , pl.Int64)
+    
+    # Inserted chromosomes
+    cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_inserted_chromsome" , cyto_regex(keyword=r"ins") , pl.Int64)
+    
+    
+    # Min-max Normalization
+    
+    col_to_normalize  = ["BM_BLAST", "WBC", "ANC", "HB", "PLT"]
+    
+    cl_df = min_max_normalization(cl_df , col_to_normalize)
+    
+    return cl_df
+    
+    
+    
+    
+    
+    
+    
+    
+    
 
-def min_max_normalization(df , col):
-    min = df[col].min()
-    max = df[col].max()
-    
-    
-    df = df.with_columns(
-        ((pl.col(col) - min)/(max - min)).alias(f"{col}_min_max")
-    )
-    
-    return df
 
-def Z_scaling(df , col):
-    mean = df[col].mean()
-    std = df[col].std()
-    
-    
-    df = df.with_columns(
-        ((pl.col(col) - mean)/(std)).alias(f"{col}_Z_score")
-    )
-    
-    return df
-
-
-    
