@@ -15,7 +15,7 @@ from sksurv.linear_model import CoxPHSurvivalAnalysis
 from sksurv.metrics import concordance_index_ipcw
 from sksurv.metrics import concordance_index_censored
 from sksurv.util import Surv
-from sksurv.ensemble import GradientBoostingSurvivalAnalysis
+from sksurv.ensemble import GradientBoostingSurvivalAnalysis ,  RandomSurvivalForest
 import matplotlib.pyplot as plt
 
 def main():
@@ -81,15 +81,25 @@ def main():
     
     X_train , X_test , y_train_split , y_test_split = train_test_split(X , y, random_state=42, test_size=0.2)
     
-    model = CoxPHSurvivalAnalysis()
-    model.fit(X_train, y_train_split)
-    
-    risk_scores = model.predict(X_test)
-    pred_test = -model.predict(X_test)
-    
-    cindex = concordance_index_censored(y_test_split["event"], y_test_split["time"], risk_scores)
-    
-    print("Concordance Index:", cindex[0])
+    models = {
+        "CoxPH": CoxPHSurvivalAnalysis(alpha=1e-4, n_iter=1000),
+        "Random Survival Forest": RandomSurvivalForest(n_estimators=100, min_samples_split=10, min_samples_leaf=15, random_state=42),
+        "Gradient Boosting": GradientBoostingSurvivalAnalysis(n_estimators=100, learning_rate=0.1, max_depth=3, random_state=42)
+    }
+
+    # Appliquer les modèles et afficher le C-index
+    for name, model in models.items():
+        model.fit(X_train, y_train_split)
+        risk_scores = model.predict(X_test)
+
+
+        scores = risk_scores
+
+        cindex = concordance_index_censored(
+            y_test_split["event"], y_test_split["time"], scores
+        )
+
+        print(f"{name} Concordance Index: {cindex[0]:.4f}")
     
     
     # # Variables d'entrée
