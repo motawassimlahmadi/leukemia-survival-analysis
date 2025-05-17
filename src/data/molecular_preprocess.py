@@ -24,46 +24,157 @@ from src.data.basic_preprocess import *
 
 
 
-def to_int(str):
-    if(str == 'X'):
-        return 23 # A justifier ?
+
+
+def to_int(chromosome_str):
+    """
+    Convert chromosome identifier to integer.
+    
+    Parameters:
+    -----------
+    chromosome_str : str
+        Chromosome identifier (e.g., '1', '2', 'X')
+        
+    Returns:
+    --------
+    int
+        Integer representation of chromosome (X is converted to 23)
+        
+    Raises:
+    -------
+    ValueError
+        If input is not a string or cannot be converted to integer
+    """
+    if not isinstance(chromosome_str, str):
+        raise ValueError("Input must be a string")
+        
+    if chromosome_str.upper() == 'X':
+        return 23  # X chromosome is represented as 23
     else:
-        return int(str)
+        try:
+            return int(chromosome_str)
+        except ValueError:
+            raise ValueError(f"Cannot convert '{chromosome_str}' to integer")
     
-def chr_to_int(df , col="CHR"):
-    df = df.with_columns(
-        pl.col(col).map_elements(to_int , return_dtype=pl.Int64)
-        .alias(col)
-    )
-    
-    return df
 
-def dna_to_array(dna):
-    lst = []
-    
-    nitrogen_bases = ['a','g','t','c']
-    dna = dna.lower()
-    
-    
-    for ch in dna:
-        if(ch in nitrogen_bases):
-            lst.append(ch)
-        else:
-            lst.append('n')
-        
-        
-    return lst
 
-def ordinal_encoder_dna(dna):
-    mapping = {'a' : 0.25 , 'c' : 0.5 ,'g':0.75 , 't' : 1.00}
     
-    nitrogen_bases = ['a','g','t','c']
+def chr_to_int(df, column_name="CHR"):
+    """
+    Convert chromosome identifiers in a dataframe column to integers.
+
+    Parameters:
+    -----------
+    df : pl.DataFrame
+        DataFrame containing chromosome data
+    column_name : str, default="CHR"
+        Column name containing chromosome identifiers
+
+    Returns:
+    --------
+    pl.DataFrame
+        DataFrame with chromosome identifiers converted to integers
+
+    Raises:
+    -------
+    ValueError
+        If input is not a Polars DataFrame or column doesn't exist
+    """
+    if not isinstance(df, pl.DataFrame):
+        raise ValueError("Input must be a Polars DataFrame")
+
+    if column_name not in df.columns:
+        raise ValueError(f"Column '{column_name}' not found in DataFrame")
+
+    try:
+        df = df.with_columns(
+            pl.col(column_name).map_elements(to_int, return_dtype=pl.Int64)
+            .alias(column_name)
+        )
+        return df
+    except Exception as e:
+        raise ValueError(f"Error converting chromosome to integer: {str(e)}")
     
-    return [mapping[x] if x in nitrogen_bases else 0.00 for x in dna ]
+
+
+def dna_to_array(dna_sequence):
+    """
+    Convert DNA sequence to array of nucleotides, replacing non-standard bases with 'n'.
+
+    Parameters:
+    -----------
+    dna_sequence : str
+        DNA sequence string
+
+    Returns:
+    --------
+    list
+        List of nucleotides ('a', 'g', 't', 'c', or 'n')
+    """
+    if not isinstance(dna_sequence, str):
+        raise ValueError("DNA sequence must be a string")
+
+    nitrogen_bases = ['a', 'g', 't', 'c']
+    dna_sequence = dna_sequence.lower()
+
+    return [ch if ch in nitrogen_bases else 'n' for ch in dna_sequence]
+
+
+
+
+def ordinal_encoder_dna(dna_sequence):
+    """
+    Encode DNA sequence as numerical values.
+
+    Parameters:
+    -----------
+    dna_sequence : str or list
+        DNA sequence as string or list of nucleotides
+
+    Returns:
+    --------
+    list
+        List of numerical values (a=0.25, c=0.5, g=0.75, t=1.0, other=0.0)
+    """
+    if isinstance(dna_sequence, str):
+        dna_sequence = dna_to_array(dna_sequence)
+
+    mapping = {'a': 0.25, 'c': 0.5, 'g': 0.75, 't': 1.00}
+
+    return [mapping.get(x, 0.0) for x in dna_sequence]
 
 
 
 def extract_kmers(sequence, k):
+    """
+    Extract k-mers from a sequence.
+
+    Parameters:
+    -----------
+    sequence : str
+        Input sequence
+    k : int
+        Length of k-mers
+
+    Returns:
+    --------
+    list
+        List of k-mers
+
+    Raises:
+    -------
+    ValueError
+        If k is larger than sequence length or not a positive integer
+    """
+    if not isinstance(sequence, str):
+        raise ValueError("Sequence must be a string")
+
+    if not isinstance(k, int) or k <= 0:
+        raise ValueError("k must be a positive integer")
+
+    if k > len(sequence):
+        raise ValueError(f"k ({k}) cannot be larger than sequence length ({len(sequence)})")
+
     return [sequence[i:i+k] for i in range(len(sequence) - k + 1)]
 
 
@@ -72,70 +183,205 @@ def join_str(str):
 
 
 
-def gene_new_name(df , cl):
-    # MLL => KMT2A
-    # WHSC1 => NSD2
-    # H3F3A => H3-3A 
-    # FAM175A => ABRAXAS1
-    # PAPD5 => TENT4B
+def gene_new_name(df, column_name):
+    """
+    Update gene names to their current nomenclature.
 
-    # NATIONAL LIBRARY OF MEDICINE
+    Parameters:
+    -----------
+    df : pl.DataFrame
+        DataFrame containing gene names
+    column_name : str
+        Column name containing gene identifiers
 
-    mapping = {'MLL' : 'KMT2A' , 'WHSC1' : 'NSD2' , 'H3F3A' : 'H3-3A' , 'FAM175A' : 'ABRAXAS1' , 'PAPD5' : 'TENT4B'}
+    Returns:
+    --------
+    pl.DataFrame
+        DataFrame with updated gene names
 
-    df = df.with_columns(
-        pl.col(cl).map_elements(lambda g: mapping.get(g, g)).alias(cl)
-    )
-    
-    return df
+    Raises:
+    -------
+    ValueError
+        If input is not a Polars DataFrame or column doesn't exist
+    """
+    if not isinstance(df, pl.DataFrame):
+        raise ValueError("Input must be a Polars DataFrame")
+
+    if column_name not in df.columns:
+        raise ValueError(f"Column '{column_name}' not found in DataFrame")
 
 
-def cytogenetics(df , cl):
-    genes = list(df[cl].unique())
+    # Mapping of old gene names to current nomenclature
+    mapping = {
+        'MLL': 'KMT2A',      # Mixed-lineage leukemia -> Lysine methyltransferase 2A
+        'WHSC1': 'NSD2',     # Wolf-Hirschhorn syndrome candidate 1 -> Nuclear SET domain-containing protein 2
+        'H3F3A': 'H3-3A',    # H3 histone family member 3A -> Histone H3.3
+        'FAM175A': 'ABRAXAS1', # Family with sequence similarity 175 member A -> BRCA1-A complex subunit Abraxas 1
+        'PAPD5': 'TENT4B'    # PAP associated domain containing 5 -> Terminal nucleotidyltransferase 4B
+    }
 
-    mg = mygene.MyGeneInfo()
+    try:
+        df = df.with_columns(
+            pl.col(column_name).map_elements(lambda g: mapping.get(g, g)).alias(column_name)
+        )
+        return df
+    except Exception as e:
+        raise ValueError(f"Error updating gene names: {str(e)}")
 
-    results = mg.querymany(genes, scopes="symbol", fields='go', species="human")
 
-    return results
+def cytogenetics(df, column_name):
+    """
+    Retrieve gene ontology information for genes in the dataframe.
+
+    Parameters:
+    -----------
+    df : pl.DataFrame
+        DataFrame containing gene names
+    column_name : str
+        Column name containing gene identifiers
+
+    Returns:
+    --------
+    list
+        List of gene ontology results
+
+    Raises:
+    -------
+    ValueError
+        If input is not a Polars DataFrame or column doesn't exist
+    """
+    if not isinstance(df, pl.DataFrame):
+        raise ValueError("Input must be a Polars DataFrame")
+
+    if column_name not in df.columns:
+        raise ValueError(f"Column '{column_name}' not found in DataFrame")
+
+    genes = list(df[column_name].unique())
+
+    try:
+        mg = mygene.MyGeneInfo()
+        results = mg.querymany(genes, scopes="symbol", fields='go', species="human", timeout=30)
+        return results
+    except Exception as e:
+        print(f"Warning: Failed to retrieve gene ontology data: {e}")
+        return []
 
 
 def genes_to_go(results_cyto):
+    """
+    Extract gene ontology terms from mygene results.
+
+    Parameters:
+    -----------
+    results_cyto : list
+        List of gene ontology results from mygene
+
+    Returns:
+    --------
+    dict
+        Dictionary mapping gene symbols to GO term IDs
+    """
+    if not results_cyto:
+        return {}
+
     gene_to_go = {}
     for res in results_cyto:
         gene = res.get('query')
         go_bp = res.get('go', {}).get('BP', [])
-        if isinstance(go_bp, dict):  # Cas d'un seul terme
+
+        # Handle case where go_bp is a dictionary (single term)
+        if isinstance(go_bp, dict):
             go_bp = [go_bp]
+
         go_terms = [go['id'] for go in go_bp if 'id' in go]
+
         if gene and go_terms:
             gene_to_go[gene] = go_terms
-            
+
     return gene_to_go
 
 
-def multi_label_gene_go(gene_to_go):
-    # 4. Créer une matrice binaire gène × GO term
+def multi_label_gene_go(gene_to_go, min_gene_count=5):
+    """
+    Create a binary matrix of genes and GO terms.
+
+    Parameters:
+    -----------
+    gene_to_go : dict
+        Dictionary mapping gene symbols to GO term IDs
+    min_gene_count : int, default=5
+        Minimum number of genes required for a GO term to be included
+
+    Returns:
+    --------
+    pd.DataFrame
+        Binary matrix with genes as index and GO terms as columns
+    """
+    if not gene_to_go:
+        return pd.DataFrame()
+
+    # Create binary matrix
     mlb = MultiLabelBinarizer()
     go_matrix = mlb.fit_transform(gene_to_go.values())
     go_df = pd.DataFrame(go_matrix, index=gene_to_go.keys(), columns=mlb.classes_)
 
-    # 5. Filtrer les GO terms peu fréquents (seuil = 5 gènes)
-    min_gene_count = 5
+    # Filter GO terms by frequency
     filtered_go_df = go_df.loc[:, (go_df.sum(axis=0) >= min_gene_count)]
 
-    
     return filtered_go_df
 
 
-def merge_df(df1 , filtered_go_df , cl , how):
-    df_pd = df1.to_pandas()
 
-    df_merged = df_pd.merge(filtered_go_df, left_on=cl, right_index=True, how=how)
-    
-    df_merged = pl.from_pandas(df_merged)
-    
-    return df_merged
+
+def merge_df(df, filtered_go_df, join_column, join_type="left"):
+    """
+    Merge dataframe with GO terms dataframe.
+
+    Parameters:
+    -----------
+    df : pl.DataFrame
+        Main dataframe
+    filtered_go_df : pd.DataFrame
+        DataFrame with GO terms
+    join_column : str
+        Column name to join on
+    join_type : str, default="left"
+        Type of join to perform
+
+    Returns:
+    --------
+    pl.DataFrame
+        Merged dataframe
+
+    Raises:
+    -------
+    ValueError
+        If input dataframes are invalid or join column doesn't exist
+    """
+    if not isinstance(df, pl.DataFrame):
+        raise ValueError("First dataframe must be a Polars DataFrame")
+
+    if not isinstance(filtered_go_df, pd.DataFrame):
+        raise ValueError("Second dataframe must be a Pandas DataFrame")
+
+    if join_column not in df.columns:
+        raise ValueError(f"Join column '{join_column}' not found in first DataFrame")
+
+    if filtered_go_df.empty:
+        return df
+
+    try:
+        # Convert to pandas for merge
+        df_pd = df.to_pandas()
+
+        # Merge dataframes
+        df_merged = df_pd.merge(filtered_go_df, left_on=join_column, right_index=True, how=join_type)
+
+        # Convert back to polars
+        return pl.from_pandas(df_merged)
+    except Exception as e:
+        raise ValueError(f"Error merging dataframes: {str(e)}")
+
 
 
 
@@ -232,10 +478,26 @@ def is_non_sens(df):
     return df
 
 
-def ismissense(elem):
-    if elem is not None and isinstance(elem, str):
-        # Vérifie que le dernier caractère est une lettre majuscule (acide aminé)
-        if elem.startswith("p.") and elem[-1].isalpha() and "*" not in elem and "fs" not in elem:
+def is_missense(protein_change):
+    """
+    Check if a protein change is a missense mutation.
+
+    Parameters:
+    -----------
+    protein_change : str
+        Protein change annotation
+
+    Returns:
+    --------
+    int
+        1 if missense mutation, 0 otherwise
+    """
+    if protein_change is not None and isinstance(protein_change, str):
+        # Check if it's a missense mutation (starts with p. and ends with amino acid letter)
+        if (protein_change.startswith("p.") and
+            protein_change[-1].isalpha() and
+            "*" not in protein_change and
+            "fs" not in protein_change):
             return 1
     return 0
 
@@ -288,34 +550,58 @@ def is_indel(str1, str2):
 
 
 
-def add_mutation_density_features(mol_df):
-    """Add mutation density features to the molecular dataframe"""
+def add_mutation_density_features(df):
+    """
+    Add mutation density features to the molecular dataframe.
 
-    # Count mutations per gene
-    gene_counts = mol_df.group_by("GENE").agg(
-        pl.len().alias("mutations_per_gene")
-    )
+    Parameters:
+    -----------
+    df : pl.DataFrame
+        DataFrame containing mutation data
 
-    # Count mutations per gene and effect type
-    gene_effect_counts = mol_df.group_by(["GENE", "EFFECT"]).agg(
-        pl.len().alias("mutations_per_gene_effect")
-    )
+    Returns:
+    --------
+    pl.DataFrame
+        DataFrame with added mutation density features
 
-    # Count mutations per chromosome region (binned)
-    region_counts = mol_df.group_by(["CHR", "START"]).agg(
-        pl.len().alias("mutations_per_region")
-    )
+    Raises:
+    -------
+    ValueError
+        If input is not a Polars DataFrame or required columns don't exist
+    """
+    if not isinstance(df, pl.DataFrame):
+        raise ValueError("Input must be a Polars DataFrame")
 
-    # Join these counts back to the original dataframe
-    mol_df = mol_df.join(gene_counts, on="GENE", how="left")
+    required_columns = ["GENE", "EFFECT", "CHR", "START"]
+    missing_columns = [col for col in required_columns if col not in df.columns]
 
-    # For gene-effect counts, we need to join on both columns
-    mol_df = mol_df.join(gene_effect_counts, on=["GENE", "EFFECT"], how="left")
-    
-    # Join region counts
-    mol_df = mol_df.join(region_counts, on=["CHR", "START"], how="left")
+    if missing_columns:
+        raise ValueError(f"Missing required columns: {', '.join(missing_columns)}")
 
-    return mol_df
+    try:
+        # Count mutations per gene
+        gene_counts = df.group_by("GENE").agg(
+            pl.len().alias("mutations_per_gene")
+        )
+
+        # Count mutations per gene and effect type
+        gene_effect_counts = df.group_by(["GENE", "EFFECT"]).agg(
+            pl.len().alias("mutations_per_gene_effect")
+        )
+
+        # Count mutations per chromosome region
+        region_counts = df.group_by(["CHR", "START"]).agg(
+            pl.len().alias("mutations_per_region")
+        )
+
+        # Join counts back to the original dataframe
+        df = df.join(gene_counts, on="GENE", how="left")
+        df = df.join(gene_effect_counts, on=["GENE", "EFFECT"], how="left")
+        df = df.join(region_counts, on=["CHR", "START"], how="left")
+
+        return df
+    except Exception as e:
+        raise ValueError(f"Error adding mutation density features: {str(e)}")
 
 
 def process_molecular_data(mol_df):
@@ -405,7 +691,7 @@ def process_molecular_data(mol_df):
 
     # 14. Identify missense mutations - optimized approach
     # Using the provided ismissense function directly with is_miss_sense
-    mol_df = map_lambda(mol_df,"PROTEIN_CHANGE","IS_MISSENSE" , ismissense , pl.Int32)
+    mol_df = map_lambda(mol_df,"PROTEIN_CHANGE","IS_MISSENSE" , is_missense , pl.Int32)
     
     # Min_Max Normalization
     
