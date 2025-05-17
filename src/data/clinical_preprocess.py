@@ -63,6 +63,17 @@ def transloc_nbr(cytogenetic):
 def is_complex(cyto):
     return 1 if len(re.findall(r"\+|\-|del|t|inv|add|i\(", cyto)) >= 3 else 0
 
+
+def is_missing_cytogenetics(df):
+    for col in df.columns:
+        null_count = df.select(pl.col(col).is_null().sum())[0, 0]
+        if null_count > 0:
+            df = df.with_columns(
+                pl.when(pl.col(col).is_null()).then(-1).otherwise(pl.col(col)).alias(col)
+            )
+            
+    return df
+
 def process_clinical_data(cl_df):
     
     # Validate input
@@ -76,8 +87,10 @@ def process_clinical_data(cl_df):
     # 2. Imputation of missing values for VAF and DEPTH
     cl_df = imputation_null_values(cl_df, ["BM_BLAST", "WBC", "ANC", "MONOCYTES", "HB", "PLT"], RandomForestRegressor())
     
+    
     # CENTER Encoding
     cl_df = binary_encoder(cl_df, ["CENTER"])
+    
     
     # Male Karyotype
     cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_a_Man" , is_male_karyotype , pl.Int32)
@@ -144,6 +157,8 @@ def process_clinical_data(cl_df):
     # Complex Karyotype
     cl_df = map_lambda(cl_df , "CYTOGENETICS" , "is_complex_karyo" , is_complex , pl.Int64)
     
+    
+    cl_df = is_missing_cytogenetics(cl_df)
     
     # Min-max Normalization
     

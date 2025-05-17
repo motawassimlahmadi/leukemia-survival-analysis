@@ -11,6 +11,9 @@ import polars as pl
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.metrics import accuracy_score, root_mean_squared_error
 from sklearn.model_selection import train_test_split
+from sksurv.linear_model import CoxPHSurvivalAnalysis
+from sksurv.metrics import concordance_index_ipcw
+from sksurv.util import Surv
 
 def main():
     
@@ -43,9 +46,18 @@ def main():
     df= load_dataset(args.dataset_path)
     df = process_molecular_data(df)
     
+    for col in df.columns:
+        if df.select(pl.col(col).is_null().sum())[0, 0] > 0:
+            print(f"Nom de colonne avec valeurs nulles : {col} , Nombre : {df.select(pl.col(col).is_null().sum())[0, 0]}")
+    
     # Clinical data set
     cl_df = load_dataset("data/raw/X_train/clinical_train.csv")
     cl_df = process_clinical_data(cl_df)
+    
+    for col in cl_df.columns:
+        if cl_df.select(pl.col(col).is_null().sum())[0, 0] > 0:
+            print(f"Nom de colonne avec valeurs nulles : {col} , Nombre : {cl_df.select(pl.col(col).is_null().sum())[0, 0]}")
+    
     
     # Joining the two datasets
     df_mol_cl = df.join(cl_df , on="ID" , how="left")
@@ -53,7 +65,6 @@ def main():
     # Y_train data set
     y_train = load_dataset("data/raw/target_train.csv")
     y_train = y_train_preprocess(y_train)
-    
     
     
     final_df = df_mol_cl.join(y_train , on="ID" , how="left")
@@ -64,6 +75,12 @@ def main():
     print(final_df)
     
     df_pd = final_df.to_pandas()
+    
+    
+    for col in final_df.columns:
+        if final_df.select(pl.col(col).is_null().sum())[0, 0] > 0:
+            print(f"Nom de colonne avec valeurs nulles : {col} , Nombre : {final_df.select(pl.col(col).is_null().sum())[0, 0]}")
+
 
     # Variables d'entrée
     X = df_pd.drop(columns=["OS_STATUS", "OS_YEARS"])

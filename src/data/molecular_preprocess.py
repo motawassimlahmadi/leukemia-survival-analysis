@@ -231,6 +231,7 @@ def is_non_sens(df):
     
     return df
 
+
 def ismissense(elem):
     if elem is not None and isinstance(elem, str):
         # Vérifie que le dernier caractère est une lettre majuscule (acide aminé)
@@ -263,7 +264,27 @@ def complex_nucleotide(df , col ):
     return df
 
 
+def is_transition(str1, str2):
+    if isinstance(str1, str) and isinstance(str2, str):
+        if (str1 == "A" and str2 == "G") or (str1 == "G" and str2 == "A"):
+            return 1
+        elif (str1 == "C" and str2 == "T") or (str1 == "T" and str2 == "C"):
+            return 1
+    return 0
 
+def is_transversion(str1, str2):
+    if isinstance(str1, str) and isinstance(str2, str):
+        trans_vers = {
+            ("A", "C"), ("C", "A"), ("C", "G"), ("G", "C"),
+            ("G", "T"), ("T", "G"), ("A", "T"), ("T", "A")
+        }
+        return int((str1, str2) in trans_vers)
+    return 0
+
+def is_indel(str1, str2):
+    if isinstance(str1, str) and isinstance(str2, str):
+        return int(len(str1) != len(str2))
+    return 0
 
 
 
@@ -307,10 +328,12 @@ def process_molecular_data(mol_df):
     mol_df = iqr_method(mol_df , ["VAF" , "DEPTH" , "START" , "END"])
 
     # 1. Convert CHR to integer
+    # X => 23
     mol_df = chr_to_int(mol_df, "CHR")
     
     # 2. Imputation of missing values for VAF and DEPTH
     mol_df = imputation_null_values(mol_df, ["CHR" , "START" , "END" , "VAF", "DEPTH"], RandomForestRegressor())
+
 
     # Add mutation density features to the molecular dataframe
     mol_df = add_mutation_density_features(mol_df)
@@ -322,6 +345,7 @@ def process_molecular_data(mol_df):
     
     # 4. Apply cytogenetics to GENE column
     results_cyto = cytogenetics(mol_df, "GENE")
+
 
     # 5. Process gene ontology data
     gene_to_go_dict = genes_to_go(results_cyto)
@@ -340,6 +364,15 @@ def process_molecular_data(mol_df):
         'P': 'Proline', 'Q': 'Glutamine', 'R': 'Arginine', 'S': 'Serine',
         'T': 'Threonine', 'V': 'Valine', 'W': 'Tryptophan', 'Y': 'Tyrosine'
     }
+    
+    
+    # NULL PROTEIN CHANGE
+    mol_df = mol_df.with_columns(
+        pl.when(pl.col("PROTEIN_CHANGE").is_null())
+        .then(pl.lit("p.?"))
+        .otherwise(pl.col("PROTEIN_CHANGE"))
+        .alias("PROTEIN_CHANGE")
+    )
 
     # Process protein changes for each amino acid
     protein_changes = mol_df["PROTEIN_CHANGE"].to_list()
@@ -392,6 +425,13 @@ def process_molecular_data(mol_df):
     
     mol_df = complex_nucleotide(mol_df , "REF")
     mol_df = complex_nucleotide(mol_df , "ALT")
+    
+    
+    mol_df = map_row(mol_df, "REF", "ALT", "is_transition", is_transition, pl.Int8)
+    mol_df = map_row(mol_df, "REF", "ALT", "is_transversion", is_transversion, pl.Int8)
+    mol_df = map_row(mol_df, "REF", "ALT", "is_indel", is_indel, pl.Int8)
+
+    
         
         
     mol_df = min_max_normalization(mol_df , col_to_normalize)

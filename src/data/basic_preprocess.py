@@ -18,6 +18,14 @@ def map_lambda(df , col , new_name , function , return_type):
     return df
 
 
+def map_row(df, col1, col2, new_name, function, return_type):
+    return df.with_columns(
+        pl.struct([col1, col2]).map_elements(
+            lambda row: function(row[col1], row[col2]), return_dtype=return_type
+        ).alias(new_name)
+    )
+
+
 
 
 def binary_encoder(df, cl_lst):
