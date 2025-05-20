@@ -88,8 +88,8 @@ def process_clinical_data(cl_df):
     cl_df = imputation_null_values(cl_df, ["BM_BLAST", "WBC", "ANC", "MONOCYTES", "HB", "PLT"], RandomForestRegressor())
     
     
-    # CENTER Encoding
-    cl_df = binary_encoder(cl_df, ["CENTER"])
+    # # CENTER Encoding
+    # cl_df = binary_encoder(cl_df, ["CENTER"])
     
     
     # Male Karyotype
@@ -165,6 +165,12 @@ def process_clinical_data(cl_df):
     col_to_normalize  = ["BM_BLAST", "WBC", "ANC", "HB", "PLT"]
     
     cl_df = min_max_normalization(cl_df , col_to_normalize)
+    
+    col_to_drop = ["iso_chromosome" , "is_added_chromsome" , "is_inserted_chromsome"]
+
+    cl_df = cl_df.drop(col_to_drop)
+    
+    
     
     return cl_df
     

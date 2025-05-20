@@ -17,6 +17,9 @@ from sksurv.metrics import concordance_index_censored
 from sksurv.util import Surv
 from sksurv.ensemble import GradientBoostingSurvivalAnalysis ,  RandomSurvivalForest
 import matplotlib.pyplot as plt
+import numpy as np
+from lifelines import CoxPHFitter
+import seaborn as sns
 
 def main():
     
@@ -79,7 +82,7 @@ def main():
     y = y_train_surv(y_feature)
     
     
-    X_train , X_test , y_train_split , y_test_split = train_test_split(X , y, random_state=42, test_size=0.2)
+    X_train , X_test , y_train_split , y_test_split = train_test_split(X , y, random_state=99, test_size=0.2 , shuffle=True)
     
     models = {
         "CoxPH": CoxPHSurvivalAnalysis(alpha=1e-4, n_iter=1000),
@@ -87,6 +90,11 @@ def main():
         "Gradient Boosting": GradientBoostingSurvivalAnalysis(n_estimators=100, learning_rate=0.1, max_depth=3, random_state=42)
     }
 
+
+    print("Train event counts:", np.unique(y_train_split["event"], return_counts=True))
+    print("Test event counts:", np.unique(y_test_split["event"], return_counts=True))
+    
+    
     # Appliquer les modèles et afficher le C-index
     for name, model in models.items():
         model.fit(X_train, y_train_split)
@@ -100,29 +108,14 @@ def main():
         )
 
         print(f"{name} Concordance Index: {cindex[0]:.4f}")
+        
     
-    
-    # # Variables d'entrée
-    # X = df_pd.drop(columns=["OS_STATUS", "OS_YEARS"])
-    # y_class = df_pd["OS_STATUS"]
-    # y_reg = df_pd["OS_YEARS"]
+    # cph = CoxPHFitter()
+    # cph.fit(df_pd, duration_col='OS_YEARS', event_col='OS_STATUS')
 
-    # # Split
-    # X_train, X_test, y_class_train, y_class_test, y_reg_train, y_reg_test = train_test_split(
-    #     X, y_class, y_reg, test_size=0.2, random_state=42
-    # )
+    # # Summary
+    # cph.print_summary()
     
-    # clf = RandomForestClassifier(random_state=42)
-    # clf.fit(X_train, y_class_train)
-    # y_class_pred = clf.predict(X_test)
-    # acc = accuracy_score(y_class_test, y_class_pred)
-    # print(f"Accuracy OS_STATUS: {acc:.4f}")
-    
-    # reg = RandomForestRegressor(random_state=42)
-    # reg.fit(X_train, y_reg_train)
-    # y_reg_pred = reg.predict(X_test)
-    # rmse = root_mean_squared_error(y_reg_test, y_reg_pred)
-    # print(f"RMSE OS_YEARS: {rmse:.4f}")
     
     
     
