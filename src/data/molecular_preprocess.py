@@ -629,16 +629,16 @@ def process_molecular_data(mol_df):
     mol_df = gene_new_name(mol_df, "GENE")
     
     
-    # 4. Apply cytogenetics to GENE column
-    results_cyto = cytogenetics(mol_df, "GENE")
+    # # 4. Apply cytogenetics to GENE column
+    # results_cyto = cytogenetics(mol_df, "GENE")
 
 
-    # 5. Process gene ontology data
-    gene_to_go_dict = genes_to_go(results_cyto)
-    filtered_go_df = multi_label_gene_go(gene_to_go_dict)
+    # # 5. Process gene ontology data
+    # gene_to_go_dict = genes_to_go(results_cyto)
+    # filtered_go_df = multi_label_gene_go(gene_to_go_dict)
 
-    # 6. Merge the dataframes
-    mol_df = merge_df(mol_df, filtered_go_df, "GENE", "left")
+    # # 6. Merge the dataframes
+    # mol_df = merge_df(mol_df, filtered_go_df, "GENE", "left")
 
     # 8. Process protein change information
     # Define amino acid mapping for protein analysis
@@ -721,6 +721,18 @@ def process_molecular_data(mol_df):
         
         
     mol_df = min_max_normalization(mol_df , col_to_normalize)
+    
+    
+    # VARIANCE THRESHOLD
+    
+    mol_df = mol_df.drop("EFFECT_0")
+    
+    # PEARSON
+    
+    col_to_drop = ["END" , "EFFECT_1" , "EFFECT_3" , "is_indel" , "is_non_sens_mutation"]
+
+    mol_df = mol_df.drop(col_to_drop)
+    
     
     
     
