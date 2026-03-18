@@ -38,6 +38,21 @@ def binary_encoder(df, cl_lst):
 
 
 
+def one_hot_encoder(df, cl_lst):
+    # Convertir en pandas
+    df_pd = df.to_pandas()
+
+    # Appliquer OneHotEncoder de category_encoders
+    encoder = ce.OneHotEncoder(cols=cl_lst, use_cat_names=True)
+    df_encoded = encoder.fit_transform(df_pd)
+
+    # Reconvertir en polars
+    return pl.from_pandas(df_encoded)
+
+
+
+
+
 def strategy_imputation(df , strategy):
     df = df.fill_null(strategy=strategy)
 

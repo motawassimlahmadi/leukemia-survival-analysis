@@ -4,7 +4,7 @@ import polars as pl
 import seaborn as sns
 
 import matplotlib.pyplot as plt
-from sklearn.tree import plot_tree
+from sklearn.tree import DecisionTreeRegressor, plot_tree
 from sklearn.model_selection import train_test_split
 from sksurv.ensemble import RandomSurvivalForest
 from sksurv.linear_model import CoxPHSurvivalAnalysis
@@ -618,7 +618,7 @@ def process_molecular_data(mol_df):
     mol_df = chr_to_int(mol_df, "CHR")
     
     # 2. Imputation of missing values for VAF and DEPTH
-    mol_df = imputation_null_values(mol_df, ["CHR" , "START" , "END" , "VAF", "DEPTH"], RandomForestRegressor())
+    mol_df = imputation_null_values(mol_df, ["CHR" , "START" , "END" , "VAF", "DEPTH"], estimator=DecisionTreeRegressor())
 
 
     # Add mutation density features to the molecular dataframe
@@ -721,19 +721,6 @@ def process_molecular_data(mol_df):
         
         
     mol_df = min_max_normalization(mol_df , col_to_normalize)
-    
-    
-    # VARIANCE THRESHOLD
-    
-    mol_df = mol_df.drop("EFFECT_0")
-    
-    # PEARSON
-    
-    col_to_drop = ["END" , "EFFECT_1" , "EFFECT_3" , "is_indel" , "is_non_sens_mutation"]
-
-    mol_df = mol_df.drop(col_to_drop)
-    
-    
     
     
 
