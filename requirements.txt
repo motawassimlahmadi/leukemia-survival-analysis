@@ -1,0 +1,7 @@
+lifelines>=0.27.0     # For survival analysis (Kaplan-Meier, Cox models, etc.)
+scikit-survival>=0.22.0  # scikit-learn compatible survival models
+polars
+category_encoders
+pandas
+mygene
+pyarrow
